@@ -37,7 +37,7 @@ namespace crashparser
         );
 
         static std::regex const exception_pattern {
-                R"REGEX(File ".+", line (\d), in .+\s*.+\s*(\w+): ([\w\s]*\w)(?:\n|$))REGEX"
+                R"REGEX(File ".+", line (\d+), in .+\s+(?:.*\s+)?(\w+): ([^\n]+)(?:\n|$))REGEX"
         };
 
         std::string in { std::istreambuf_iterator { input_stream }, {} };
