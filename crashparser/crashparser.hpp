@@ -1,6 +1,5 @@
 #pragma once
 
-#include <list>
 #include <regex>
 #include <string>
 #include <fstream>
@@ -20,7 +19,7 @@ namespace crashparser
          * Opens file with given file name, parses it's content
          * and writes parsed data to output stream
          */
-        crashparser(std::string const& filename, std::ostream& output_stream)
+        explicit crashparser(std::string const& filename)
             : filename(filename)
         {
             std::ifstream file { filename.data() };
@@ -28,8 +27,16 @@ namespace crashparser
             if (!file.good()) throw std::runtime_error { strerror(errno) };
 
             parse(file);
-            write(output_stream);
         }
+
+        crashparser(crashparser const&) = default;
+
+        crashparser(crashparser&& other) noexcept
+                : filename(std::move(other.filename))
+        {
+            root.swap(other.root);
+        }
+
 
         /**
          * Writes parsed exception data to output_stream output_stream using json format
