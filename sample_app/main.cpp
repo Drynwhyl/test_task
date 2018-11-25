@@ -7,7 +7,7 @@ int main(int argc, char** argv)
     {
         try
         {
-            crashparser::parse_file(argv[1], std::cout);
+            crashparser::crashparser { argv[1], std::cout };
         }
         catch (std::exception& e)
         {

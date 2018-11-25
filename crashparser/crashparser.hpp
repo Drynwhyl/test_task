@@ -22,92 +22,77 @@ namespace crashparser
         std::string message;
     };
 
-    /**
-     * Reads log text from input_stream and inserts parsed data using inserter iterator
-     */
-    template<typename IteratorT>
-    void parse(std::istream& input_stream, IteratorT inserter)
+    template<template<typename, typename> typename Container = std::list>
+    class crashparser
     {
-        static_assert(
-                std::is_same_v<
-                        std::output_iterator_tag,
-                        typename std::iterator_traits<IteratorT>::iterator_category
-                >,
-                "IteratorT must meet the requirements of OutputIterator"
-        );
+        Container<exception_data, std::allocator<crashparser>> data;
 
-        static std::regex const exception_pattern {
-                R"REGEX(File ".+", line (\d+), in .+\s+(?:.*\s+)?(\w+): ([^\n]+)(?:\n|$))REGEX"
-        };
+    public:
 
-        std::string in { std::istreambuf_iterator { input_stream }, {} };
-
-        for (
-                std::sregex_iterator it { in.begin(), in.end(), exception_pattern }, it_end;
-                it != it_end;
-                ++it
-                )
+        /**
+         * Opens file with given file name, parses it's content
+         * and writes parsed data to output stream
+         */
+        crashparser(std::string const& filename, std::ostream& output_stream)
+            : filename(filename)
         {
-            auto results = *it;
-            exception_data data { results[1], results[2], results[3] };
-            *inserter = data;
-            ++inserter;
+            std::ifstream file { filename.data() };
+
+            if (!file.good()) throw std::runtime_error { strerror(errno) };
+
+            parse(file);
+            write(output_stream);
         }
-    }
 
-    /**
-     * Writes parsed exception data to output_stream output_stream using json format
-     */
-    template<typename IteratorT>
-    void write_json(std::ostream& output_stream, std::string_view filename, IteratorT it, IteratorT it_end)
-    {
-        static_assert(
-                std::is_base_of_v<
-                        std::input_iterator_tag,
-                        typename std::iterator_traits<IteratorT>::iterator_category
-                >,
-                "IteratorT must meet the requirements of InputIterator"
-        );
+        /**
+         * Writes parsed exception data to output_stream output_stream using json format
+         */
+        void write(std::ostream& output_stream)
+        {
+            pt::write_json(output_stream, root);
+        }
 
-        static_assert(
-                std::is_same_v<
-                        exception_data,
-                        typename std::iterator_traits<IteratorT>::value_type
-                >,
-                "IteratorT must have value_type to be and exception_data"
-        );
+    private:
 
+        std::string filename;
         pt::ptree root;
 
-        root.put("filename", filename.data());
-
-        pt::ptree exceptions_node;
-        for (; it != it_end; ++it)
+        /**
+         * Reads log text from input_stream and inserts parsed data using inserter iterator
+         */
+        void parse(std::istream& input_stream)
         {
-            pt::ptree exception_data;
-            exception_data.put("line", it->line);
-            exception_data.put("type", it->type);
-            exception_data.put("message", it->message);
-            exceptions_node.push_back(std::pair { "", exception_data });
+            static std::regex const exception_pattern {
+                    R"REGEX(File ".+", line (\d+), in .+\s+(?:.*\s+)?(\w+): ([^\n]+)(?:\n|$))REGEX"
+            };
+
+            std::string in { std::istreambuf_iterator { input_stream }, {} };
+            auto inserter = std::inserter(data, std::begin(data));
+
+            for (
+                    std::sregex_iterator it { in.begin(), in.end(), exception_pattern }, it_end;
+                    it != it_end;
+                    ++it
+                    )
+            {
+                auto& match_results = *it;
+                *inserter++ = { match_results[1], match_results[2], match_results[3] };
+            }
+
+            root.put("filename", filename.data());
+
+            pt::ptree exceptions_list;
+            for (auto&& exception : data)
+            {
+                pt::ptree exception_node;
+                exception_node.put("line", exception.line);
+                exception_node.put("type", exception.type);
+                exception_node.put("message", exception.message);
+                exceptions_list.push_back(std::pair { "", exception_node });
+            }
+            root.add_child("exceptions", exceptions_list);
         }
-        root.add_child("exceptions", exceptions_node);
 
-        pt::write_json(output_stream, root);
-    }
-
-    /**
-     * Opens file with given file name, parses it's content
-     * and writes parsed data to output stream
-     */
-    inline void parse_file(std::string_view filename, std::ostream& out)
-    {
-        std::ifstream file { filename.data() };
-
-        if (!file.good()) throw std::runtime_error { strerror(errno) };
-
-        std::list<exception_data> data;
-        parse(file, std::back_inserter(data));
-        write_json(out, filename, data.begin(), data.end());
-    }
-};
+    };
+}
 
