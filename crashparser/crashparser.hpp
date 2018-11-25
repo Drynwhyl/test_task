@@ -12,21 +12,8 @@ namespace crashparser
 {
     namespace pt = boost::property_tree;
 
-    /**
-     * Represents parsed exception data
-     */
-    struct exception_data
-    {
-        std::string line;
-        std::string type;
-        std::string message;
-    };
-
-    template<template<typename, typename> typename Container = std::list>
     class crashparser
     {
-        Container<exception_data, std::allocator<crashparser>> data;
-
     public:
 
         /**
@@ -67,7 +54,8 @@ namespace crashparser
             };
 
             std::string in { std::istreambuf_iterator { input_stream }, {} };
-            auto inserter = std::inserter(data, std::begin(data));
+
+            pt::ptree exceptions_list;
 
             for (
                     std::sregex_iterator it { in.begin(), in.end(), exception_pattern }, it_end;
@@ -76,20 +64,15 @@ namespace crashparser
                     )
             {
                 auto& match_results = *it;
-                *inserter++ = { match_results[1], match_results[2], match_results[3] };
+
+                pt::ptree exception_node;
+                exception_node.put("line", match_results[1]);
+                exception_node.put("type", match_results[2]);
+                exception_node.put("message", match_results[3]);
+                exceptions_list.push_back(std::pair { "", exception_node });
             }
 
             root.put("filename", filename.data());
-
-            pt::ptree exceptions_list;
-            for (auto&& exception : data)
-            {
-                pt::ptree exception_node;
-                exception_node.put("line", exception.line);
-                exception_node.put("type", exception.type);
-                exception_node.put("message", exception.message);
-                exceptions_list.push_back(std::pair { "", exception_node });
-            }
             root.add_child("exceptions", exceptions_list);
         }
 
